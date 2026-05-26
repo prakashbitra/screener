@@ -80,7 +80,6 @@ function loadTab(region) {
             }
 
             tbody.innerHTML = data.map(stock => {
-                // Generate the correct TradingView URL prefix
                 const exchangePrefix = region === 'india' ? 'NSE:' : '';
                 const cleanTicker = stock.ticker.replace('.NS', '');
                 const tvLink = `https://www.tradingview.com/chart/?symbol=${exchangePrefix}${cleanTicker}`;
@@ -91,11 +90,11 @@ function loadTab(region) {
                         <a href="${tvLink}" target="_blank" style="color: #60a5fa; text-decoration: none; font-weight: bold; font-size: 1.1rem;">
                             ${cleanTicker} ↗
                         </a>
-                        <div style="font-size: 0.75rem; color: #64748b; margin-top: 4px;">CHoCH Breakout (${stock.bars} bars ago)</div>
+                        <div style="font-size: 0.75rem; color: #64748b; margin-top: 4px;">CHoCH (${stock.bars} bars ago)</div>
                     </td>
-                    <td style="font-weight: 500;">$${stock.entry.toFixed(2)}</td>
-                    <td style="color: #10b981; font-weight: 600;">$${stock.target.toFixed(2)}</td>
-                    <td style="color: #ef4444; font-weight: 600;">$${stock.sl.toFixed(2)}</td>
+                    <td style="font-weight: 500;">$${stock.entry ? stock.entry.toFixed(2) : 'N/A'}</td>
+                    <td style="color: #10b981; font-weight: 600;">$${stock.target ? stock.target.toFixed(2) : 'N/A'}</td>
+                    <td style="color: #ef4444; font-weight: 600;">$${stock.sl ? stock.sl.toFixed(2) : 'N/A'}</td>
                 </tr>
                 `;
             }).join('');
