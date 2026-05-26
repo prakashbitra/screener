@@ -1,0 +1,36 @@
+name: 4-Hour Market Screener
+
+on:
+  schedule:
+    - cron: '0 */4 * * *' # Runs exactly every 4 hours
+  workflow_dispatch: # Allows you to manually click a "Run" button to test
+
+jobs:
+  run-screener:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install Dependencies
+        run: |
+          pip install yfinance pandas numpy pytz
+
+      - name: Run Screener Engine
+        run: python screener.py
+
+      - name: Commit and Push Results
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          git add data.json
+          git commit -m "Auto-update market data [skip ci]" || exit 0
+          git push
