@@ -32,14 +32,34 @@
         <tbody id="table-body"><tr><td colspan="3">Fetching latest scan...</td></tr></tbody>
     </table>
 
-    <script>
+<script>
         let screenerData = {};
+        const CACHE_TIME_MS = 60000; // 60 seconds. Change to whatever you prefer.
 
         async function init() {
+            const now = new Date().getTime();
+            const lastFetch = localStorage.getItem('lastFetchTime');
+            const cachedData = localStorage.getItem('screenerData');
+
+            // 1. Check if we should block the refresh and use the cache
+            if (cachedData && lastFetch && (now - lastFetch < CACHE_TIME_MS)) {
+                screenerData = JSON.parse(cachedData);
+                const secondsLeft = Math.round((CACHE_TIME_MS - (now - lastFetch)) / 1000);
+                document.getElementById('timestamp').innerText = 
+                    `Last Scanned: ${screenerData.last_updated} (Network refresh blocked for ${secondsLeft}s)`;
+                loadTab('india');
+                return; // Stop the script here, do not fetch from GitHub
+            }
+
+            // 2. If the cache expired, fetch fresh data from GitHub
             try {
-                // Add a random cache buster so the browser always gets the newest data.json
-                const response = await fetch('data.json?t=' + new Date().getTime());
+                const response = await fetch('data.json?t=' + now);
                 screenerData = await response.json();
+                
+                // Save the fresh data to the browser's cache memory
+                localStorage.setItem('screenerData', JSON.stringify(screenerData));
+                localStorage.setItem('lastFetchTime', now.toString());
+
                 document.getElementById('timestamp').innerText = "Last Scanned: " + screenerData.last_updated;
                 loadTab('india');
             } catch (error) {
