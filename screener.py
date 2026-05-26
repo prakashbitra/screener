@@ -18,14 +18,22 @@ def calculate_hma(series, length=9):
     return wma(wma_half - wma_full, sqrt_length)
 
 def check_setup(df):
-    if len(df) < 40: return False, 0
+    if len(df) < 40: return False, None
     
     df['HMA_9'] = calculate_hma(df['Close'].dropna(), 9)
     highs = df['High'].dropna()
+    lows = df['Low'].dropna()
+    
+    # Structural Pivot Highs (Breakout Level)
     df['PivotHigh'] = highs[(highs > highs.shift(1)) & (highs > highs.shift(2)) & 
                             (highs > highs.shift(-1)) & (highs > highs.shift(-2))]
     df['LastPivot'] = df['PivotHigh'].ffill()
     df['CHoCH_Trigger'] = (df['Close'] > df['LastPivot']) & (df['Close'].shift(1) <= df['LastPivot'].shift(1))
+    
+    # Stop Loss Level: Swing Low Pivot (Lookback 3 left, 3 right)
+    df['PivotLow'] = lows[(lows < lows.shift(1)) & (lows < lows.shift(2)) & (lows < lows.shift(3)) & 
+                          (lows < lows.shift(-1)) & (lows < lows.shift(-2)) & (lows < lows.shift(-3))]
+    df['LastPivotLow'] = df['PivotLow'].ffill()
     
     above_hma = df['Close'].iloc[-1] > df['HMA_9'].iloc[-1]
     recent_triggers = df['CHoCH_Trigger'].iloc[-3:]
@@ -34,11 +42,29 @@ def check_setup(df):
     
     if above_hma and has_recent_choch and above_structure:
         bars_ago = 3 - np.where(recent_triggers)[0][-1]
-        return True, int(bars_ago) # Converted to native int for JSON
-    return False, 0
+        
+        # Setup Math
+        entry_price = float(df['Close'].iloc[-1])
+        sl_price = float(df['LastPivotLow'].iloc[-1])
+        
+        # Failsafe: If SL is somehow NA or above entry, fallback to recent 10-bar low
+        if pd.isna(sl_price) or sl_price >= entry_price:
+            sl_price = float(df['Low'].iloc[-10:].min())
+            if sl_price >= entry_price: return False, None # Invalid setup
+            
+        risk = entry_price - sl_price
+        target_price = entry_price + (risk * 2) # 1:2 Risk Reward
+        
+        return True, {
+            "bars": int(bars_ago),
+            "entry": round(entry_price, 2),
+            "sl": round(sl_price, 2),
+            "target": round(target_price, 2)
+        }
+    return False, None
 
 def run_screener():
-# Top 200 Indian Equities (Nifty 50 + Next 50 + Midcap 100 constituents)
+    # Top 200 Indian Equities
     india_tickers = [
         "RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "ICICIBANK.NS", "BHARTIARTL.NS", "SBI.NS", "INFY.NS",
         "LICI.NS", "ITC.NS", "HINDUNILVR.NS", "LT.NS", "BAJFINANCE.NS", "HCLTECH.NS", "MARUTI.NS",
@@ -71,7 +97,7 @@ def run_screener():
         "TATAINVEST.NS", "JSWENERGY.NS", "SUZLON.NS", "INOXWIND.NS"
     ]
 
-    # Top 200 US Equities (S&P 500 & Nasdaq 100 mega/large cap mix)
+    # Top 200 US Equities
     usa_tickers = [
         "AAPL", "MSFT", "NVDA", "AMZN", "META", "GOOGL", "GOOG", "TSLA", "AVGO", "LLY", "JPM", "V", "UNH",
         "XOM", "MA", "JNJ", "PG", "HD", "MRK", "COST", "ABBV", "CVX", "CRM", "AMD", "PEP", "KO", "WMT",
@@ -94,18 +120,19 @@ def run_screener():
     
     results = {"india": [], "usa": [], "last_updated": ""}
     
-    # FIX: Switched from yf.download() to yf.Ticker().history() for flat data structures
     for ticker in india_tickers:
         df = yf.Ticker(ticker).history(period="3mo", interval="1d")
         if not df.empty:
-            is_valid, bars_ago = check_setup(df)
-            if is_valid: results["india"].append({"ticker": ticker, "price": float(df['Close'].iloc[-1]), "bars": bars_ago})
+            is_valid, setup = check_setup(df)
+            if is_valid: 
+                results["india"].append({"ticker": ticker, **setup})
             
     for ticker in usa_tickers:
         df = yf.Ticker(ticker).history(period="3mo", interval="1d")
         if not df.empty:
-            is_valid, bars_ago = check_setup(df)
-            if is_valid: results["usa"].append({"ticker": ticker, "price": float(df['Close'].iloc[-1]), "bars": bars_ago})
+            is_valid, setup = check_setup(df)
+            if is_valid: 
+                results["usa"].append({"ticker": ticker, **setup})
 
     est = pytz.timezone('US/Eastern')
     results["last_updated"] = datetime.now(est).strftime("%Y-%m-%d %H:%M:%S EST")
