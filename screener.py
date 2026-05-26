@@ -34,31 +34,31 @@ def check_setup(df):
     
     if above_hma and has_recent_choch and above_structure:
         bars_ago = 3 - np.where(recent_triggers)[0][-1]
-        return True, bars_ago
+        return True, int(bars_ago) # Converted to native int for JSON
     return False, 0
 
 def run_screener():
-    # Tweak your stock lists here whenever you want
     india_tickers = ["RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "INFY.NS"]
     usa_tickers = ["AAPL", "MSFT", "NVDA", "AMZN"]
     
     results = {"india": [], "usa": [], "last_updated": ""}
     
+    # FIX: Switched from yf.download() to yf.Ticker().history() for flat data structures
     for ticker in india_tickers:
-        df = yf.download(ticker, period="3mo", interval="1d", progress=False)
-        is_valid, bars_ago = check_setup(df)
-        if is_valid: results["india"].append({"ticker": ticker, "price": float(df['Close'].iloc[-1]), "bars": bars_ago})
+        df = yf.Ticker(ticker).history(period="3mo", interval="1d")
+        if not df.empty:
+            is_valid, bars_ago = check_setup(df)
+            if is_valid: results["india"].append({"ticker": ticker, "price": float(df['Close'].iloc[-1]), "bars": bars_ago})
             
     for ticker in usa_tickers:
-        df = yf.download(ticker, period="3mo", interval="1d", progress=False)
-        is_valid, bars_ago = check_setup(df)
-        if is_valid: results["usa"].append({"ticker": ticker, "price": float(df['Close'].iloc[-1]), "bars": bars_ago})
+        df = yf.Ticker(ticker).history(period="3mo", interval="1d")
+        if not df.empty:
+            is_valid, bars_ago = check_setup(df)
+            if is_valid: results["usa"].append({"ticker": ticker, "price": float(df['Close'].iloc[-1]), "bars": bars_ago})
 
-    # Record the time of the scan
     est = pytz.timezone('US/Eastern')
     results["last_updated"] = datetime.now(est).strftime("%Y-%m-%d %H:%M:%S EST")
     
-    # Write to JSON file
     with open('data.json', 'w') as f:
         json.dump(results, f, indent=4)
 
