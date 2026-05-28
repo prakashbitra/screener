@@ -14,23 +14,38 @@ def calculate_hma(series, length=9):
     return wma(wma(series, half_length) * 2 - wma(series, length), sqrt_length)
 
 def check_setup(df):
-    if len(df) < 40: return False, None
-    df = df.copy()
-    df['HMA_9'] = calculate_hma(df['Close'].dropna(), 9)
-    # Pivot Highs
-    df['PivotHigh'] = df['High'][(df['High'] > df['High'].shift(1)) & (df['High'] > df['High'].shift(2)) & (df['High'] > df['High'].shift(-1)) & (df['High'] > df['High'].shift(-2))]
-    df['LastPivot'] = df['PivotHigh'].ffill()
-    # Pivot Lows (SL)
-    df['PivotLow'] = df['Low'][(df['Low'] < df['Low'].shift(1)) & (df['Low'] < df['Low'].shift(2)) & (df['Low'] < df['Low'].shift(3)) & (df['Low'] < df['Low'].shift(-1)) & (df['Low'] < df['Low'].shift(-2)) & (df['Low'] < df['Low'].shift(-3))]
-    df['LastPivotLow'] = df['PivotLow'].ffill()
+    if len(df) < 50: return False, None
     
-    df['CHoCH_Trigger'] = (df['Close'] > df['LastPivot']) & (df['Close'].shift(1) <= df['LastPivot'].shift(1))
+    # ATR & Trendline Slope
+    df['ATR'] = df['High'].rolling(28).max() - df['Low'].rolling(28).min() # Simplified ATR proxy
+    slope = df['ATR'] / 28 * 1.6
     
-    if (df['Close'].iloc[-1] > df['HMA_9'].iloc[-1]) and df['CHoCH_Trigger'].iloc[-3:].any() and (df['Close'].iloc[-1] > df['LastPivot'].iloc[-1]):
+    # Pivot Highs/Lows (Lookback 28)
+    df['ph'] = (df['High'] > df['High'].shift(28)) & (df['High'] > df['High'].shift(-28))
+    df['pl'] = (df['Low'] < df['Low'].shift(28)) & (df['Low'] < df['Low'].shift(-28))
+    
+    # Last SH/SL for CHoCH
+    df['lastSH'] = df['High'].where(df['ph']).ffill()
+    df['lastSL'] = df['Low'].where(df['pl']).ffill()
+    
+    # Signals
+    bullCHoCH = (df['Close'] > df['lastSH'].shift(1)) & (df['Close'].shift(1) <= df['lastSH'].shift(2))
+    bearCHoCH = (df['Close'] < df['lastSL'].shift(1)) & (df['Close'].shift(1) >= df['lastSL'].shift(2))
+    
+    # Trendline Breakout (Placeholder using RSI/Vol proxy for 'Break')
+    bullBreak = df['Close'] > df['High'].rolling(28).mean() + slope
+    
+    # Combined Signal (CHoCH within 20 bars of Break)
+    # We look for bullBreak in the last 20 bars
+    recent_break = bullBreak.rolling(20).any()
+    
+    if (bullCHoCH.iloc[-1] and recent_break.iloc[-1]):
         entry = float(df['Close'].iloc[-1])
-        sl = float(df['LastPivotLow'].iloc[-1]) if not pd.isna(df['LastPivotLow'].iloc[-1]) else float(df['Low'].iloc[-10:].min())
-        target = entry + ((entry - sl) * 2)
-        return True, {"entry": entry, "target": target, "sl": sl, "bars": int(np.where(df['CHoCH_Trigger'].iloc[-3:])[0][-1] + 1)}
+        sl = float(df['lastSL'].iloc[-1])
+        risk = entry - sl
+        if risk <= 0: return False, None
+        return True, {"entry": entry, "target": entry + (risk * 1.5), "sl": sl}
+        
     return False, None
 
 def run_screener():
