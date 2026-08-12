@@ -1,4 +1,11 @@
 {
-    "india": [],
+    "india": [
+        {
+            "ticker": "RELIANCE.NS",
+            "entry": 1329.0,
+            "sl": 1309.800048828125,
+            "target": 1355.58
+        }
+    ],
     "usa": []
 }
